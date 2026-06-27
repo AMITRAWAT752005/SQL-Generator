@@ -1,3 +1,5 @@
+import { apiClient } from './api';
+
 export interface QueryResult {
   columns: string[];
   rows: Record<string, any>[];
@@ -6,7 +8,6 @@ export interface QueryResult {
   database: string;
 }
 
-// Mock Data Sets
 const MOCK_STUDENTS = [
   { id: 1, first_name: 'John', last_name: 'Doe', email: 'john.doe@edu.org', age: 21, enrollment_date: '2024-09-01' },
   { id: 2, first_name: 'Jane', last_name: 'Smith', email: 'jane.smith@edu.org', age: 22, enrollment_date: '2024-09-01' },
@@ -60,30 +61,30 @@ const MOCK_ORDER_ITEMS = [
 
 export const queryService = {
   executeQuery: async (sql: string, dbName: string): Promise<QueryResult> => {
-    // Simulate networking and query processing delay
-    const latency = Math.floor(Math.random() * 400) + 100; // 100-500ms
+    if (!apiClient.isMockEnabled()) {
+      return apiClient.post<QueryResult>('/query/execute', {
+        sql,
+        database: dbName,
+      });
+    }
+
+    const latency = Math.floor(Math.random() * 400) + 100;
     await new Promise((resolve) => setTimeout(resolve, latency));
 
     const cleanSql = sql.trim().toLowerCase();
-    
-    // Safety verification check: deny dangerous operations
     const forbidden = ['drop', 'truncate', 'alter', 'delete', 'insert', 'update', 'create'];
     for (const op of forbidden) {
-      // Avoid false positives like "order by desc" (contains desc, not drop/delete)
       const regex = new RegExp(`\\b${op}\\b`, 'i');
       if (regex.test(cleanSql)) {
         throw new Error(`Permission Denied: Write/Modify operation '${op.toUpperCase()}' is restricted on this connection.`);
       }
     }
 
-    // Basic SQL syntax validation
     if (!cleanSql.startsWith('select')) {
       throw new Error("Syntax Error: Only 'SELECT' queries are supported on this read-only dashboard.");
     }
 
-    // Determine target table and filter
     let rawRows: Record<string, any>[] = [];
-    
     if (cleanSql.includes('students')) {
       rawRows = MOCK_STUDENTS;
     } else if (cleanSql.includes('courses')) {
@@ -99,23 +100,18 @@ export const queryService = {
     } else if (cleanSql.includes('order_items')) {
       rawRows = MOCK_ORDER_ITEMS;
     } else {
-      // Fallback generic data
       rawRows = [
-        { id: 1, msg: "Query executed successfully, but target table was not recognized.", sql_ran: sql }
+        { id: 1, msg: 'Query executed successfully, but target table was not recognized.', sql_ran: sql },
       ];
     }
 
-    // Simulate simple filtering if applicable
     let filteredRows = [...rawRows];
-
-    // Check for LIMIT
     const limitMatch = cleanSql.match(/limit\s+(\d+)/);
     if (limitMatch) {
       const limit = parseInt(limitMatch[1], 10);
       filteredRows = filteredRows.slice(0, limit);
     }
 
-    // Check for WHERE clause filters (very simple mock filters)
     if (cleanSql.includes('age >')) {
       const ageMatch = cleanSql.match(/age\s*>\s*(\d+)/);
       if (ageMatch) {
@@ -131,19 +127,17 @@ export const queryService = {
       }
     }
 
-    // Check for aggregate functions like COUNT
     if (cleanSql.includes('count(*)') || cleanSql.includes('count(1)')) {
       filteredRows = [{ 'COUNT(*)': filteredRows.length }];
     }
 
     const columns = filteredRows.length > 0 ? Object.keys(filteredRows[0]) : [];
-
     return {
       columns,
       rows: filteredRows,
       rowCount: filteredRows.length,
       executionTime: latency,
-      database: dbName
+      database: dbName,
     };
-  }
+  },
 };

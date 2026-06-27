@@ -1,3 +1,5 @@
+import { apiClient } from './api';
+
 export interface ColumnSchema {
   name: string;
   type: string;
@@ -27,7 +29,6 @@ export interface DBConnection {
 
 const CONNECTIONS_KEY = 'sql_gen_connections';
 
-// Predefined Mock Schemas
 export const UNIVERSITY_SCHEMA: TableSchema[] = [
   {
     tableName: 'students',
@@ -152,8 +153,19 @@ export const databaseService = {
     database: string,
     username: string
   ): Promise<boolean> => {
-    await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate networking
-    // Just simple validation for mock
+    if (!apiClient.isMockEnabled()) {
+      const result = await apiClient.post<{ success: boolean }>('/databases/test', {
+        name,
+        type,
+        host,
+        port,
+        database,
+        username,
+      });
+      return result.success !== false;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     if (!host || !database || !username) {
       throw new Error('Host, database name, and username are required.');
     }
@@ -168,10 +180,25 @@ export const databaseService = {
     database: string,
     username: string
   ): Promise<DBConnection> => {
+    if (!apiClient.isMockEnabled()) {
+      const response = await apiClient.post<DBConnection>('/databases', {
+        name,
+        type,
+        host,
+        port,
+        database,
+        username,
+      });
+
+      const connections = databaseService.getConnections();
+      connections.push(response);
+      databaseService.saveConnections(connections);
+      return response;
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const connections = databaseService.getConnections();
-    
-    // Pick schema template based on database name / type
+
     let chosenSchema = UNIVERSITY_SCHEMA;
     if (database.toLowerCase().includes('shop') || database.toLowerCase().includes('store') || database.toLowerCase().includes('commerce')) {
       chosenSchema = ECOMMERCE_SCHEMA;
@@ -189,7 +216,7 @@ export const databaseService = {
       username,
       status: 'connected',
       schema: chosenSchema,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
     connections.push(newConnection);
@@ -198,9 +225,13 @@ export const databaseService = {
   },
 
   deleteConnection: async (id: string): Promise<void> => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (!apiClient.isMockEnabled()) {
+      await apiClient.del(`/databases/${id}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, apiClient.isMockEnabled() ? 500 : 0));
     const connections = databaseService.getConnections();
     const filtered = connections.filter((c) => c.id !== id);
     databaseService.saveConnections(filtered);
-  }
+  },
 };

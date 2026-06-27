@@ -1,3 +1,5 @@
+import { apiClient } from './api';
+
 export interface ProfilePreferences {
   theme: 'light' | 'dark';
   dialect: 'postgresql' | 'mysql' | 'sqlite' | 'mssql';
@@ -20,8 +22,8 @@ const DEFAULT_PROFILE: UserProfile = {
     theme: 'dark',
     dialect: 'postgresql',
     streamingSpeed: 'normal',
-    notifications: true
-  }
+    notifications: true,
+  },
 };
 
 export const profileService = {
@@ -35,18 +37,44 @@ export const profileService = {
   },
 
   updateProfile: async (name: string, email: string): Promise<UserProfile> => {
-    await new Promise((resolve) => setTimeout(resolve, 600));
     const profile = profileService.getProfile();
-    profile.name = name;
-    profile.email = email;
-    localStorage.setItem(PREF_KEY, JSON.stringify(profile));
-    return profile;
+    const updated = { ...profile, name, email };
+
+    if (!apiClient.isMockEnabled()) {
+      try {
+        const response = await apiClient.put<UserProfile>('/profile', {
+          name,
+          email,
+        });
+        localStorage.setItem(PREF_KEY, JSON.stringify(response));
+        return response;
+      } catch {
+        localStorage.setItem(PREF_KEY, JSON.stringify(updated));
+        return updated;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    localStorage.setItem(PREF_KEY, JSON.stringify(updated));
+    return updated;
   },
 
   updatePreferences: async (preferences: Partial<ProfilePreferences>): Promise<UserProfile> => {
     const profile = profileService.getProfile();
-    profile.preferences = { ...profile.preferences, ...preferences };
-    localStorage.setItem(PREF_KEY, JSON.stringify(profile));
-    return profile;
-  }
+    const updated = { ...profile, preferences: { ...profile.preferences, ...preferences } };
+
+    if (!apiClient.isMockEnabled()) {
+      try {
+        const response = await apiClient.put<UserProfile>('/profile/preferences', preferences);
+        localStorage.setItem(PREF_KEY, JSON.stringify(response));
+        return response;
+      } catch {
+        localStorage.setItem(PREF_KEY, JSON.stringify(updated));
+        return updated;
+      }
+    }
+
+    localStorage.setItem(PREF_KEY, JSON.stringify(updated));
+    return updated;
+  },
 };

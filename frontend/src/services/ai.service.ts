@@ -1,4 +1,5 @@
 import { TableSchema } from './database.service';
+import { apiClient } from './api';
 
 export interface AIStreamUpdate {
   status: 'thinking' | 'generating' | 'completed' | 'error';
@@ -13,8 +14,6 @@ export const aiService = {
     schema: TableSchema[],
     onUpdate: (update: AIStreamUpdate) => void
   ): Promise<{ sql: string; explanation: string }> => {
-    
-    // 1. Thinking steps
     onUpdate({ status: 'thinking', message: 'Understanding your request...' });
     await new Promise((resolve) => setTimeout(resolve, 800));
 
@@ -24,12 +23,21 @@ export const aiService = {
     onUpdate({ status: 'thinking', message: 'Reading table schemas...' });
     await new Promise((resolve) => setTimeout(resolve, 600));
 
-    // Determine mock SQL and explanation based on input keywords
+    if (!apiClient.isMockEnabled()) {
+      const response = await apiClient.post<{ sql: string; explanation: string }>('/ai/generate-sql', {
+        prompt,
+        schema,
+      });
+
+      onUpdate({ status: 'generating', message: 'Generating SQL...' });
+      onUpdate({ status: 'completed', message: 'SQL Ready.', sql: response.sql, explanation: response.explanation });
+      return response;
+    }
+
     const lowerPrompt = prompt.toLowerCase();
     let generatedSql = '';
     let explanation = '';
 
-    // University DB rules
     if (lowerPrompt.includes('student') || lowerPrompt.includes('grade') || lowerPrompt.includes('enroll')) {
       if (lowerPrompt.includes('older than') || lowerPrompt.includes('age >') || lowerPrompt.includes('age greater')) {
         const ageMatch = lowerPrompt.match(/(?:older than|age >|age greater than)\s*(\d+)/);
@@ -46,9 +54,7 @@ export const aiService = {
         generatedSql = `SELECT * \nFROM students \nLIMIT 100;`;
         explanation = `This query retrieves the first 100 student records from the students table.`;
       }
-    }
-    // ECommerce DB rules
-    else if (lowerPrompt.includes('product') || lowerPrompt.includes('price') || lowerPrompt.includes('stock') || lowerPrompt.includes('order') || lowerPrompt.includes('user')) {
+    } else if (lowerPrompt.includes('product') || lowerPrompt.includes('price') || lowerPrompt.includes('stock') || lowerPrompt.includes('order') || lowerPrompt.includes('user')) {
       if (lowerPrompt.includes('expensive') || lowerPrompt.includes('top price') || lowerPrompt.includes('order by price')) {
         generatedSql = `SELECT * \nFROM products \nORDER BY price DESC \nLIMIT 5;`;
         explanation = `This query selects all columns from the products table, sorts them by price in descending order, and limits the output to the top 5 most expensive products.`;
@@ -68,9 +74,7 @@ export const aiService = {
         generatedSql = `SELECT * \nFROM products \nLIMIT 50;`;
         explanation = `This query fetches up to 50 product records from the catalog.`;
       }
-    }
-    // Generic fallback
-    else {
+    } else {
       if (schema.length > 0) {
         const firstTable = schema[0];
         const primaryCols = firstTable.columns.map((c) => c.name).slice(0, 3).join(', ');
@@ -88,8 +92,7 @@ export const aiService = {
     onUpdate({ status: 'generating', message: 'Validating SQL query syntax...' });
     await new Promise((resolve) => setTimeout(resolve, 600));
 
-    onUpdate({ status: 'completed', message: 'SQL Ready.', sql: generatedSql, explanation: explanation });
-
+    onUpdate({ status: 'completed', message: 'SQL Ready.', sql: generatedSql, explanation });
     return { sql: generatedSql, explanation };
-  }
+  },
 };
