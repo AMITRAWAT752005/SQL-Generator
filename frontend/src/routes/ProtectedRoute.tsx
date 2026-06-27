@@ -1,0 +1,50 @@
+import React from 'react';
+import { Navigate, Outlet } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
+
+export const ProtectedRoute: React.FC = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div
+        className="flex-center"
+        style={{
+          minHeight: '100vh',
+          background: 'var(--bg-primary)',
+          color: 'var(--text-secondary)',
+          flexDirection: 'column',
+          gap: '16px',
+        }}
+      >
+        {/* Simple inline spinning SVG */}
+        <svg
+          width="38"
+          height="38"
+          viewBox="0 0 38 38"
+          stroke="var(--primary)"
+          style={{ animation: 'fadeIn 0.5s ease, pulse-glow 2s infinite' }}
+        >
+          <g fill="none" fillRule="evenodd">
+            <g transform="translate(1 1)" strokeWidth="2">
+              <circle strokeOpacity=".5" cx="18" cy="18" r="18" />
+              <path d="M36 18c0-9.94-8.06-18-18-18">
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  from="0 18 18"
+                  to="360 18 18"
+                  dur="1s"
+                  repeatCount="indefinite"
+                />
+              </path>
+            </g>
+          </g>
+        </svg>
+        <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>Initializing Session...</span>
+      </div>
+    );
+  }
+
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+};
